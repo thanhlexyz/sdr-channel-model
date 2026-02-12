@@ -32,7 +32,7 @@ def get_args():
     parser.add_argument('--n_symbol', type=int, default=64)
     parser.add_argument('--n_sps', type=int, default=16)
     # channel dataset
-    parser.add_argument('--n_prep', type=int, default=1000)
+    parser.add_argument('--n_prep', type=int, default=2000)
     # trainer (z -> z_hat)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--max_epoch', type=int, default=100)
@@ -49,6 +49,7 @@ def get_args():
     parser.add_argument('--verbose', action='store_true')
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--debug_idx', type=int, default=0, help='Example index for debug scenario')
     # parse args
     args = parser.parse_args()
     # other defaults
