@@ -20,7 +20,7 @@ class Receiver:
         sdr.sample_rate             = args.sample_rate
         sdr.rx_buffer_size          = (args.n_symbol + args.n_preamble) * args.n_sps * 3 # x2 to fit the whole frame within buffer
         sdr.rx_rf_bandwidth         = args.sample_rate
-        sdr.gain_control_mode_chan0 = 'fast_attack'
+        sdr.gain_control_mode_chan0 = getattr(args, 'gain_control_mode', 'fast_attack')
         # save sdr
         self.sdr = sdr
 

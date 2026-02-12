@@ -8,7 +8,7 @@ def visualize_channel(args):
     train_loader, test_loader = simulator.dataloader.create(args)
     # get one example
     generator = iter(test_loader)
-    for i in range(100):
+    for i in range(20):
         z_batch, z_hat_batch = next(generator)
         z = z_batch.squeeze()
         z_hat = z_hat_batch.squeeze()

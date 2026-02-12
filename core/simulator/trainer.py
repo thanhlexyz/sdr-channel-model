@@ -3,18 +3,18 @@ import torch
 import torch.nn as nn
 
 from . import dataloader
-from .model import Model
+from .model import ARChannelModel
 from .monitor import Monitor
 
 
 class Trainer:
-    """Train the channel Model (Rayleigh fading + AWGN) so that the distribution of
-    generated z_hat = Model(z) matches labeled z_hat, by minimizing NLL (equiv. KL)."""
+    """Train the autoregressive channel model: given past h and moving average of L items of h,
+    predict next h (real/imag with mean + std) until length n_symbol. h = z_hat / z from dataset."""
 
     def __init__(self, args):
         self.args = args
         self.train_loader, self.test_loader = dataloader.create(args)
-        self.model = Model(args).to(args.device)
+        self.model = ARChannelModel(args).to(args.device)
         self.monitor = Monitor(args)
         self._create_other()
 
@@ -30,7 +30,7 @@ class Trainer:
             T_max=getattr(args, 'max_epoch', 100),
             eta_min=1e-5,
         )
-        model_dir = os.path.join(args.model_dir, 'channel_io_rayleigh_awgn')
+        model_dir = os.path.join(args.model_dir, 'channel_io_ar')
         os.makedirs(model_dir, exist_ok=True)
         self.model_dir = model_dir
         self.best_loss = float('inf')
@@ -44,8 +44,15 @@ class Trainer:
         for batch_id, (z, z_hat) in enumerate(self.train_loader):
             z = z.to(args.device)
             z_hat = z_hat.to(args.device)
-            log_p = self.model.log_prob_z_hat_given_z(z, z_hat)
-            nll = -log_p.mean()
+            # h = z_hat / z (same as in visualize_channel), avoid div by zero
+            eps = 1e-10
+            h = z_hat / (z + eps)
+            h_real = h.real.float()
+            h_imag = h.imag.float()
+            # (B, n_symbol) -> build input (B, n_symbol, 4) and get params
+            x = self.model.build_input_from_h(h_real, h_imag)
+            params = self.model(x)
+            nll = self.model.nll_loss(params, h_real, h_imag)
             self.optimizer.zero_grad()
             nll.backward()
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
@@ -64,8 +71,13 @@ class Trainer:
         for batch_id, (z, z_hat) in enumerate(self.test_loader):
             z = z.to(args.device)
             z_hat = z_hat.to(args.device)
-            log_p = self.model.log_prob_z_hat_given_z(z, z_hat)
-            nll = -log_p.mean()
+            eps = 1e-10
+            h = z_hat / (z + eps)
+            h_real = h.real.float()
+            h_imag = h.imag.float()
+            x = self.model.build_input_from_h(h_real, h_imag)
+            params = self.model(x)
+            nll = self.model.nll_loss(params, h_real, h_imag)
             running_nll += nll.item() * z.size(0)
             n_samples += z.size(0)
         test_loss = running_nll / n_samples

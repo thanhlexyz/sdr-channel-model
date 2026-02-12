@@ -2,102 +2,120 @@ import torch.nn as nn
 import torch
 import numpy as np
 
-class Model(nn.Module):
+
+def _moving_avg_last_l(h_real, h_imag, L):
+    """Compute moving average of last L steps. h_real, h_imag: (B, T). Returns (B, T, 2) for (ma_real, ma_imag)."""
+    B, T = h_real.shape
+    device = h_real.device
+    ma_real = torch.zeros(B, T, device=device, dtype=h_real.dtype)
+    ma_imag = torch.zeros(B, T, device=device, dtype=h_imag.dtype)
+    for t in range(T):
+        start = max(0, t - L)
+        if start < t:
+            ma_real[:, t] = h_real[:, start:t].mean(dim=1)
+            ma_imag[:, t] = h_imag[:, start:t].mean(dim=1)
+    return torch.stack([ma_real, ma_imag], dim=-1)  # (B, T, 2)
+
+
+class ARChannelModel(nn.Module):
     """
-    i.i.d. Rayleigh fading channel: Re(h) ~ N(h_mean_real, h_std_real²), Im(h) ~ N(h_mean_imag, h_std_imag²);
-    noise n ~ CN(0, σ²). Output: y = h * x + n.
+    Autoregressive model for channel h (complex): given past h and moving average of last L,
+    predict next h as Gaussian on real and imag (mean + std each).
+    Input at step t: [h_{t-1}_real, h_{t-1}_imag, ma_real, ma_imag]. Step 0 uses zeros.
+    Output at step t: (mean_real, mean_imag, std_real, std_imag) for h_t.
     """
 
-    def __init__(self, args=None, sigma_init=0.005,
-                 h_std_real_init=1.0, h_std_imag_init=1.0,
-                 h_mean_real_init=0.0, h_mean_imag_init=0.0):
+    def __init__(self, args):
         super().__init__()
         self.args = args
-        # Learnable noise power for AWGN noise (σ²)
-        self.log_sigma = nn.Parameter(torch.tensor(np.log(max(sigma_init, 1e-6)), dtype=torch.float32))
-        # Learnable std for real and imag parts of fading (each > 0)
-        self.log_h_std_real = nn.Parameter(torch.tensor(np.log(max(h_std_real_init, 1e-6)), dtype=torch.float32))
-        self.log_h_std_imag = nn.Parameter(torch.tensor(np.log(max(h_std_imag_init, 1e-6)), dtype=torch.float32))
-        # Learnable complex mean for fading
-        self.h_mean_real = nn.Parameter(torch.tensor(float(h_mean_real_init), dtype=torch.float32))
-        self.h_mean_imag = nn.Parameter(torch.tensor(float(h_mean_imag_init), dtype=torch.float32))
-
-    @property
-    def sigma(self):
-        return torch.exp(self.log_sigma)
-
-    @property
-    def h_std_real(self):
-        return torch.exp(self.log_h_std_real)
-
-    @property
-    def h_std_imag(self):
-        return torch.exp(self.log_h_std_imag)
-
-    @property
-    def h_mean(self):
-        return torch.complex(self.h_mean_real, self.h_mean_imag)
+        self.n_symbol = getattr(args, 'n_symbol', 64)
+        self.ma_window = getattr(args, 'ma_window', 8)
+        input_size = 4  # h_prev real, imag + ma real, imag
+        hidden_size = getattr(args, 'ar_hidden', 128)
+        self.hidden_size = hidden_size
+        self.embed = nn.Linear(input_size, hidden_size)
+        self.gru = nn.GRU(hidden_size, hidden_size, batch_first=True)
+        self.out = nn.Linear(hidden_size, 4)  # mean_real, mean_imag, log_std_real, log_std_imag
 
     def forward(self, x):
-        # extract args
-        args = self.args
-        # ensure x is complex
-        assert torch.is_complex(x)
-        # 1. randomly draw AWGN noise: n ~ CN(0, σ²Ik)
-        noise_std = torch.sqrt(self.sigma / 2.0)
-        n_real = torch.randn(x.shape, device=args.device, dtype=torch.float32) * noise_std
-        n_imag = torch.randn(x.shape, device=args.device, dtype=torch.float32) * noise_std
-        n = torch.complex(n_real, n_imag)
-        # 2. randomly draw i.i.d. Rayleigh fading: Re(h) ~ N(h_mean_real, h_std_real²), Im(h) ~ N(h_mean_imag, h_std_imag²)
-        h_shape = x.shape[:-1] + (1,)
-        h_real = torch.randn(h_shape, device=args.device, dtype=torch.float32) * self.h_std_real
-        h_imag = torch.randn(h_shape, device=args.device, dtype=torch.float32) * self.h_std_imag
-        h = self.h_mean + torch.complex(h_real, h_imag)
-        # 3. apply channel effect: η(z) = hz + n
-        # For slow fading, h is scalar, so multiply element-wise (broadcasting)
-        x = h * x + n
+        """
+        x: (B, n_symbol, 4) — per step [h_prev_real, h_prev_imag, ma_real, ma_imag]
+        Returns: (B, n_symbol, 4) as (mean_real, mean_imag, log_std_real, log_std_imag)
+        """
+        B, T, _ = x.shape
+        h = torch.tanh(self.embed(x))  # (B, T, hidden)
+        out, _ = self.gru(h)  # (B, T, hidden)
+        params = self.out(out)  # (B, T, 4)
+        # clamp log_std for stability
+        params = torch.cat([
+            params[..., :2],
+            torch.clamp(params[..., 2:4], min=-4.0, max=2.0),
+        ], dim=-1)
+        return params
+
+    def log_prob_h(self, params, h_real, h_imag):
+        """
+        params: (B, T, 4) — mean_real, mean_imag, log_std_real, log_std_imag
+        h_real, h_imag: (B, T)
+        Returns: (B, T) log prob per step (sum of real + imag Gaussian log probs)
+        """
+        mean_r, mean_i = params[..., 0], params[..., 1]
+        log_std_r, log_std_i = params[..., 2], params[..., 3]
+        std_r = torch.exp(log_std_r) + 1e-6
+        std_i = torch.exp(log_std_i) + 1e-6
+        log_p_r = -0.5 * np.log(2 * np.pi) - log_std_r - 0.5 * ((h_real - mean_r) / std_r) ** 2
+        log_p_i = -0.5 * np.log(2 * np.pi) - log_std_i - 0.5 * ((h_imag - mean_i) / std_i) ** 2
+        return log_p_r + log_p_i
+
+    def nll_loss(self, params, h_real, h_imag):
+        """Average NLL over batch and symbols."""
+        log_p = self.log_prob_h(params, h_real, h_imag)  # (B, T)
+        return -log_p.mean()
+
+    def build_input_from_h(self, h_real, h_imag):
+        """
+        h_real, h_imag: (B, n_symbol). Build input (B, n_symbol, 4) with prev h and MA.
+        At step 0 we use 0 for prev and MA.
+        """
+        B, T = h_real.shape
+        L = self.ma_window
+        ma = _moving_avg_last_l(h_real, h_imag, L)  # (B, T, 2)
+        # prev h: shift right by 1, pad with 0
+        h_prev_real = torch.nn.functional.pad(h_real[:, :-1], (1, 0), value=0.0)  # (B, T)
+        h_prev_imag = torch.nn.functional.pad(h_imag[:, :-1], (1, 0), value=0.0)
+        x = torch.stack([h_prev_real, h_prev_imag, ma[..., 0], ma[..., 1]], dim=-1)  # (B, T, 4)
         return x
 
-    def log_prob_z_hat_given_z(self, z, z_hat):
+    @torch.no_grad()
+    def sample_h(self, batch_size=1, n_symbol=None, device=None):
         """
-        Log probability of z_hat given z under the channel model.
-        z_hat = h*z + n with h ~ CN(h_mean, h_std_real² + h_std_imag²), n ~ CN(0, σ²).
-        So z_hat_i | z_i ~ CN(h_mean*z_i, |z_i|²*(h_std_real² + h_std_imag²) + σ²).
-        Returns log p(z_hat | z) summed over batch and symbols (for NLL), or per-sample mean if needed.
+        Autoregressively sample h of length n_symbol. Uses moving average of sampled past.
+        Returns h_real, h_imag each (batch_size, n_symbol).
         """
-        # z, z_hat: (B, 64) complex
-        h_mean = self.h_mean  # complex scalar
-        var_h = self.h_std_real ** 2 + self.h_std_imag ** 2  # complex variance of h
-        sigma_sq = self.sigma ** 2
-        eps = 1e-10
-        # Per-symbol variance: |z_i|^2 * var_h + sigma^2
-        z_sq = torch.abs(z) ** 2  # (B, 64)
-        var_per = z_sq * var_h + sigma_sq + eps  # (B, 64)
-        mean_per = h_mean * z  # (B, 64)
-        # Complex circular Gaussian: log p = -log(pi) - log(var) - |z_hat - mean|^2 / var
-        diff_sq = torch.abs(z_hat - mean_per) ** 2  # (B, 64)
-        log_var = torch.log(var_per)
-        log_p = -np.log(np.pi) - log_var - diff_sq / var_per
-        return log_p  # (B, 64)
-
-
-class ZToZHatModel(nn.Module):
-    """Maps z (real vector of Re/Im stacked) to z_hat to minimize KL between model output and target."""
-
-    def __init__(self, args, hidden_dim=256, num_layers=3):
-        super().__init__()
-        self.args = args
-        # Input/output: 64 complex -> 128 real (Re; Im stacked)
-        dim = 64 * 2  # 128
-        layers = []
-        in_d = dim
-        for _ in range(num_layers - 1):
-            layers.append(nn.Linear(in_d, hidden_dim))
-            layers.append(nn.ReLU(inplace=True))
-            in_d = hidden_dim
-        layers.append(nn.Linear(in_d, dim))
-        self.net = nn.Sequential(*layers)
-
-    def forward(self, z_flat):
-        # z_flat: (B, 128)
-        return self.net(z_flat)
+        n_symbol = n_symbol or self.n_symbol
+        device = device or next(self.parameters()).device
+        h_real = torch.zeros(batch_size, n_symbol, device=device, dtype=torch.float32)
+        h_imag = torch.zeros(batch_size, n_symbol, device=device, dtype=torch.float32)
+        hidden = None
+        for t in range(n_symbol):
+            start = max(0, t - self.ma_window)
+            if start < t:
+                ma_r = h_real[:, start:t].mean(dim=1)
+                ma_i = h_imag[:, start:t].mean(dim=1)
+            else:
+                ma_r = torch.zeros(batch_size, device=device, dtype=torch.float32)
+                ma_i = torch.zeros(batch_size, device=device, dtype=torch.float32)
+            h_prev_r = h_real[:, t - 1] if t > 0 else torch.zeros(batch_size, device=device, dtype=torch.float32)
+            h_prev_i = h_imag[:, t - 1] if t > 0 else torch.zeros(batch_size, device=device, dtype=torch.float32)
+            x = torch.stack([h_prev_r, h_prev_i, ma_r, ma_i], dim=-1).unsqueeze(1)  # (B, 1, 4)
+            h_emb = torch.tanh(self.embed(x))
+            out, hidden = self.gru(h_emb, hidden)
+            params = self.out(out).squeeze(1)  # (B, 4)
+            mean_r, mean_i = params[:, 0], params[:, 1]
+            log_std_r = torch.clamp(params[:, 2], min=-4.0, max=2.0)
+            log_std_i = torch.clamp(params[:, 3], min=-4.0, max=2.0)
+            std_r = torch.exp(log_std_r) + 1e-6
+            std_i = torch.exp(log_std_i) + 1e-6
+            h_real[:, t] = mean_r + torch.randn(batch_size, device=device, dtype=torch.float32) * std_r
+            h_imag[:, t] = mean_i + torch.randn(batch_size, device=device, dtype=torch.float32) * std_i
+        return h_real, h_imag
