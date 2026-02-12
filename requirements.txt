@@ -1,0 +1,11 @@
+# for running hardware demonstration on Rasberry Pi 4
+pyadi-iio==0.0.14
+pylibiio==0.23.1
+torch==2.6.0
+
+# for simulator on Workstation
+# latest version of torch on cuda
+matplotlib
+pandas
+numpy
+tqdm
