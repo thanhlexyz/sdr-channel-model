@@ -32,3 +32,5 @@ where `x \in \mathbb{C}` is input symbol,
 `y \in \mathbb{C}` is output symbol.
 
 But after visualization it shouldn't be i.i.d.
+Should fit the kernel to generate moving average.
+Then fit the variance.
