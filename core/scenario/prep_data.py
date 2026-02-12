@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import tqdm
+import os
 
 import pysdr
 
@@ -9,7 +10,7 @@ def prep_data(args):
     transmitter = pysdr.transmitter.create('ip:192.168.3.1', args)
     receiver = pysdr.receiver.create('ip:192.168.2.1', args)
     Z, Z_hat = [], []
-    for _ in tqdm.tqdm(range(args.n_test)):
+    for _ in tqdm.tqdm(range(args.n_prep)):
         # stop anything transmitting before
         transmitter.stop()
         # transmitter logic

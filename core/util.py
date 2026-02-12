@@ -33,23 +33,18 @@ def get_args():
     parser.add_argument('--n_sps', type=int, default=16)
     # channel dataset
     parser.add_argument('--n_prep', type=int, default=1000)
-    # trainer
-    # parser.add_argument('--trainer', type=str, default='classifier')
-    # parser.add_argument('--batch_size', type=int, default=128)
-    # parser.add_argument('--max_epoch', type=int, default=100)
-    # parser.add_argument('--lr', type=float, default=3e-4)
-    # tester
-    # parser.add_argument('--n_test', type=int, default=30)
+    # trainer (z -> z_hat)
+    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--max_epoch', type=int, default=100)
+    parser.add_argument('--lr', type=float, default=3e-4)
+    parser.add_argument('--weight_decay', type=float, default=1e-5)
     # data directory
     parser.add_argument('--dataset_dir', type=str, default=f'../data/dataset')
     parser.add_argument('--figure_dir', type=str, default=f'../data/figure')
     parser.add_argument('--model_dir', type=str, default=f'../data/model')
     parser.add_argument('--csv_dir', type=str, default=f'../data/csv')
     # others
-    if torch.cuda.is_available():
-        parser.add_argument('--device', type=str, default='cuda:0')
-    else:
-        parser.add_argument('--device', type=str, default='cpu')
+    parser.add_argument('--device', type=str, default='cuda:0' if torch.cuda.is_available() else 'cpu')
     parser.add_argument('--no_pbar', action='store_true')
     parser.add_argument('--verbose', action='store_true')
     parser.add_argument('--debug', action='store_true')
