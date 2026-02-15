@@ -30,5 +30,8 @@ def fit(args):
     N_imag = np.array([n.imag for n in N])
     n_imag_mean = N_imag.mean()
     n_imag_std  = N_imag.std()
-    print(f'{h_real_mean=} {h_real_std=} {h_imag_mean} {h_imag_std=}')
-    print(f'{n_real_mean=} {n_real_std=} {n_imag_mean} {n_imag_std=}')
+    # save model
+    model = simulator.model.channel.Model(args)
+    model.set_params(
+
+    )
