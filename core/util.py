@@ -35,7 +35,7 @@ def get_args():
     parser.add_argument('--n_symbol', type=int, default=256)
     parser.add_argument('--n_sps', type=int, default=8)
     # channel dataset
-    parser.add_argument('--n_prep', type=int, default=2000)
+    parser.add_argument('--n_prep', type=int, default=1000)
     # trainer (z -> z_hat)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--max_epoch', type=int, default=100)
@@ -61,5 +61,5 @@ def get_args():
     # other defaults
     create_folders(args)
     # reproducible
-    set_random_seed(args)
+    # set_random_seed(args)
     return args
