@@ -68,7 +68,7 @@ def plot_n_distribution(args):
     ax_cdf.legend()
     ax_cdf.grid(True, alpha=0.3)
     ax_cdf.set_title('CDF of real/imag')
-    ax_cdf.set_yscale('log')
+    # ax_cdf.set_yscale('log')
 
     # save figure
     plt.tight_layout()
