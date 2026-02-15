@@ -16,34 +16,24 @@ def plot_h_distribution(args):
         z = Z[i]
         z_hat = Z_hat[i]
         h = z.mean() / z_hat.mean()
-        print(h)
         H.append(h)
     H = np.array(H)
     if len(H) == 0:
         raise ValueError('No valid h extracted from data')
-
-    # Load channel model and sample h_hat
+    # load channel model
     model_path = os.path.join(args.model_dir, 'channel.pt')
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f'Model not found: {model_path}. Run scenario fit first.')
     model = simulator.model.channel.Model(args)
-    model.load_state_dict(torch.load(model_path, map_location='cpu'))
+    model.load_state_dict(torch.load(model_path, map_location=args.device))
     model.eval()
-
-    n_sample = len(H)
-    with torch.no_grad():
-        h_real_mean = model.h_real_mean.item()
-        h_real_std = model.h_real_std.item()
-        h_imag_mean = model.h_imag_mean.item()
-        h_imag_std = model.h_imag_std.item()
-    h_hat_real = np.random.randn(n_sample) * h_real_std + h_real_mean
-    h_hat_imag = np.random.randn(n_sample) * h_imag_std + h_imag_mean
+    # sample h_hat
+    h_hat_real = np.random.randn(n_sample) * model.h_real_std.item() + model.h_real_mean.item()
+    h_hat_imag = np.random.randn(n_sample) * model.h_imag_std.item() + model.h_imag_mean.item()
     H_hat = h_hat_real + 1j * h_hat_imag
 
-    # Figure: scatter (real vs imag) + CDF subplots
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    # figure: scatter (real vs imag) + CDF subplots
+    fig, axes = plt.subplots(1, 2, figsize=(6, 3))
 
-    # Left: scatter real vs imag for h and h_hat
+    # left: scatter real vs imag for h and h_hat
     ax_scatter = axes[0]
     ax_scatter.scatter(H.real, H.imag, alpha=0.5, s=10, label='h (data)', c='C0')
     ax_scatter.scatter(H_hat.real, H_hat.imag, alpha=0.5, s=10, label='h_hat (model)', c='C1')
@@ -54,7 +44,7 @@ def plot_h_distribution(args):
     ax_scatter.grid(True, alpha=0.3)
     ax_scatter.set_title('h and h_hat (real vs imag)')
 
-    # Right: CDF of |h| and |h_hat| (or real/imag separately). Plot CDF of real and imag for both.
+    # right: CDF of |h| and |h_hat| (or real/imag separately). Plot CDF of real and imag for both.
     ax_cdf = axes[1]
     for label, vals in [('h.real', H.real), ('h.imag', H.imag), ('h_hat.real', H_hat.real), ('h_hat.imag', H_hat.imag)]:
         sorted_vals = np.sort(vals)
@@ -66,9 +56,8 @@ def plot_h_distribution(args):
     ax_cdf.grid(True, alpha=0.3)
     ax_cdf.set_title('CDF of real/imag')
 
+    # save figure
     plt.tight_layout()
-    out_path = os.path.join(getattr(args, 'figure_dir', '.'), 'h_distribution.png')
-    plt.savefig(out_path, dpi=150)
-    print(f'[+] saved plot at: {out_path}')
-    plt.show()
-    plt.close()
+    path = os.path.join(args.figure_dir, f'{args.scenario}.pdf')
+    plt.savefig(path)
+    print(f'[+] saved plot at: {path}')
