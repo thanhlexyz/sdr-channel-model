@@ -36,10 +36,12 @@ def fit(args):
     model = simulator.model.channel.Model(args)
     model.set_params(
         h_real_mean=h_real_mean, h_real_std=h_real_std, h_imag_mean=h_imag_mean, h_imag_std=h_imag_std,
-        n_real_mean=n_real_mean, n_real_std=h_real_std, n_imag_mean=n_imag_mean, n_imag_std=n_imag_std,
+        n_real_mean=n_real_mean, n_real_std=n_real_std, n_imag_mean=n_imag_mean, n_imag_std=n_imag_std,
     )
     # save model
     path = os.path.join(args.model_dir, 'channel.pt')
     state_dict = model.state_dict()
+    print(state_dict)
+    exit()
     torch.save(state_dict, path)
     print(f'[+] saved channel model at: {path}')

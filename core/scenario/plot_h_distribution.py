@@ -10,6 +10,7 @@ def plot_h_distribution(args):
     path = os.path.join(args.dataset_dir, 'channel_io.npz')
     data = np.load(path)
     Z, Z_hat = data['Z'], data['Z_hat']
+
     # extract h
     H = []
     for i in range(args.n_prep):
@@ -25,13 +26,14 @@ def plot_h_distribution(args):
     model = simulator.model.channel.Model(args)
     model.load_state_dict(torch.load(model_path, map_location=args.device))
     model.eval()
+
     # sample h_hat
-    h_hat_real = np.random.randn(n_sample) * model.h_real_std.item() + model.h_real_mean.item()
-    h_hat_imag = np.random.randn(n_sample) * model.h_imag_std.item() + model.h_imag_mean.item()
+    h_hat_real = np.random.randn(args.n_prep) * model.h_real_std.item() + model.h_real_mean.item()
+    h_hat_imag = np.random.randn(args.n_prep) * model.h_imag_std.item() + model.h_imag_mean.item()
     H_hat = h_hat_real + 1j * h_hat_imag
 
     # figure: scatter (real vs imag) + CDF subplots
-    fig, axes = plt.subplots(1, 2, figsize=(6, 3))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
 
     # left: scatter real vs imag for h and h_hat
     ax_scatter = axes[0]
