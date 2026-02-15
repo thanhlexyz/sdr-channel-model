@@ -2,6 +2,8 @@ import os
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+from scipy import stats
+
 import simulator
 
 
@@ -29,9 +31,15 @@ def plot_n_distribution(args):
     model.load_state_dict(torch.load(model_path, map_location='cpu'))
     model.eval()
 
-    # sample n_hat
-    n_hat_real = np.random.randn(args.n_prep) * model.n_real_std.item() + model.n_real_mean.item()
-    n_hat_imag = np.random.randn(args.n_prep) * model.n_imag_std.item() + model.n_imag_mean.item()
+    # sample n_hat from Student's t
+    n_hat_real = stats.t.rvs(
+        df=model.n_real_df.item(), loc=model.n_real_loc.item(), scale=model.n_real_scale.item(),
+        size=args.n_prep, random_state=None
+    )
+    n_hat_imag = stats.t.rvs(
+        df=model.n_imag_df.item(), loc=model.n_imag_loc.item(), scale=model.n_imag_scale.item(),
+        size=args.n_prep, random_state=None
+    )
     N_hat = n_hat_real + 1j * n_hat_imag
 
     # figure: scatter (real vs imag) + CDF subplots
@@ -60,6 +68,7 @@ def plot_n_distribution(args):
     ax_cdf.legend()
     ax_cdf.grid(True, alpha=0.3)
     ax_cdf.set_title('CDF of real/imag')
+    ax_cdf.set_yscale('log')
 
     # save figure
     plt.tight_layout()
