@@ -31,7 +31,7 @@ def plot_h_distribution(args):
     H_hat = h_hat_real + 1j * h_hat_imag
 
     # figure: scatter (real vs imag) + CDF subplots
-    fig, axes = plt.subplots(1, 2, figsize=(6, 3))
+    fig, axes = plt.subplots(1, 2, figsize=(8, 4))
 
     # left: scatter real vs imag for h and h_hat
     ax_scatter = axes[0]
@@ -57,7 +57,6 @@ def plot_h_distribution(args):
     ax_cdf.set_title('CDF of real/imag')
     # save figure
     plt.tight_layout()
-    out_path = os.path.join(args.figure_dir, f'{args.scenario}.pdf')
-    print(f'[+] saved plot at: {out_path}')
-    plt.show()
-    plt.close()
+    path = os.path.join(args.figure_dir, f'{args.scenario}.pdf')
+    print(f'[+] saved plot at: {path}')
+    plt.savefig(path)

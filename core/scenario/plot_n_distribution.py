@@ -43,7 +43,7 @@ def plot_n_distribution(args):
     N_hat = n_hat_real + 1j * n_hat_imag
 
     # figure: scatter (real vs imag) + CDF subplots
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(8, 4))
 
     # left: scatter only top args.n_prep points
     n_pts = min(args.n_prep, len(N), len(N_hat))
