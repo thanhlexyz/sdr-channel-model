@@ -18,7 +18,7 @@ def fit(args):
     # use last prep for plot: h per symbol in that block
     z = Z[N - 1]
     z_hat = Z_hat[N - 1]
-    h = z / z_hat
+    h = z_hat / z
     # timestamp of each symbol (seconds)
     dt = args.n_sps / args.sample_rate
     t = np.arange(L) * dt
