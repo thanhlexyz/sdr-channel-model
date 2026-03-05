@@ -1,30 +1,34 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 import os
 
+import simulator
 
 def fit(args):
     # load data
     path = os.path.join(args.dataset_dir, f'channel_io.npz')
     data = np.load(path)
     Z, Z_hat = data['Z'], data['Z_hat']
-    n_prep = min(args.n_prep, len(Z))
+#     Z = Z[:, 100:args.n_symbol+100]
+#     Z_hat = Z_hat[:, 100:args.n_symbol+100]
+    # Z =
+    N = min(args.n_prep, len(Z))
+    L = args.n_symbol
     # use last prep for plot: h per symbol in that block
-    z = Z[n_prep - 1]
-    z_hat = Z_hat[n_prep - 1]
+    z = Z[N - 1]
+    z_hat = Z_hat[N - 1]
     h = z / z_hat
     # timestamp of each symbol (seconds)
     dt = args.n_sps / args.sample_rate
-    t = np.arange(args.n_symbol) * dt
+    t = np.arange(L) * dt
     # fit Doppler so h_hat has same curvature as h: h(t) ≈ a*exp(j*(2*pi*f_D*t + phi))
     # f_D in Hz (not carrier_freq!); get from FFT of h
-    f_axis = np.fft.fftfreq(args.n_symbol, dt)
+    f_axis = np.fft.fftfreq(L, dt)
     # print(f'{f_axis=}')
     F = np.fft.fft(h)
-    print(f'{np.abs(F)=}')
     k_max = np.argmax(np.abs(F))
-    f_D = float(f_axis[k_max])  # Hz
-    print(f_D)
+    f_D = float(f_axis[k_max]) * 1.05  # Hz
     # a and phi: a*exp(j*phi) = mean(h * exp(-j*2*pi*f_D*t))
     z_n = h * np.exp(-1j * 2 * np.pi * f_D * t)
     c = np.mean(z_n)
@@ -59,3 +63,16 @@ def fit(args):
     plt.legend()
     plt.tight_layout()
     plt.show()
+
+    # create model
+    model = simulator.model.create(args)
+    model.set_params(a=a,
+                     f_D=f_D,
+                     dt=dt,
+                     n_real_mean=n_real_mean,
+                     n_real_std=n_real_std,
+                     n_imag_mean=n_imag_mean,
+                     n_imag_std=n_imag_std)
+    path = os.path.join(args.model_dir, f'{args.model}.pt')
+    torch.save(model, path)
+    print(f'+ saved {model} at {path}')

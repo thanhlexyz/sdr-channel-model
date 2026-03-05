@@ -33,17 +33,11 @@ def get_args():
     # frame structure
     parser.add_argument('--n_preamble', type=int, default=11) # baker's preamble sequence
     parser.add_argument('--n_symbol', type=int, default=2048)
-    parser.add_argument('--n_sps', type=int, default=8)
+    parser.add_argument('--n_sps', type=int, default=16)
     # channel dataset
-    parser.add_argument('--n_prep', type=int, default=1)
-    # trainer (z -> z_hat)
-    parser.add_argument('--batch_size', type=int, default=64)
-    parser.add_argument('--max_epoch', type=int, default=100)
-    # AR channel model (h = z_hat/z)
-    parser.add_argument('--ma_window', type=int, default=8, help='Moving average window L for past h')
-    parser.add_argument('--ar_hidden', type=int, default=128, help='Hidden size for AR channel model')
-    parser.add_argument('--lr', type=float, default=3e-4)
-    parser.add_argument('--weight_decay', type=float, default=1e-5)
+    parser.add_argument('--n_prep', type=int, default=10)
+    # channel model
+    parser.add_argument('--model', type=str, default='doppler')
     # data directory
     parser.add_argument('--dataset_dir', type=str, default=f'../data/dataset')
     parser.add_argument('--figure_dir', type=str, default=f'../data/figure')
