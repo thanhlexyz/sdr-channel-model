@@ -1,6 +1,8 @@
-import torch
-import torch.nn as nn
 from torch.distributions import Normal
+import torch.nn as nn
+import numpy as np
+import torch
+import os
 
 
 class Model(nn.Module):
@@ -13,7 +15,8 @@ class Model(nn.Module):
         self.args = args
         # doppler: a (magnitude), f_D (Hz)
         self.a   = nn.Parameter(torch.tensor(1.0), requires_grad=False)
-        self.f_D = nn.Parameter(torch.tensor(0.0), requires_grad=False)   # Hz
+        self.f_D = nn.Parameter(torch.tensor(0.0), requires_grad=False)
+        self.dt = nn.Parameter(torch.tensor(1.0), requires_grad=False)
         # noise (Gaussian)
         self.n_real_mean = nn.Parameter(torch.tensor(0.0), requires_grad=False)
         self.n_real_std = nn.Parameter(torch.tensor(0.03), requires_grad=False)
@@ -31,17 +34,32 @@ class Model(nn.Module):
         self.n_imag_mean = nn.Parameter(torch.tensor(float(n_imag_mean), dtype=torch.float), requires_grad=False)
         self.n_imag_std  = nn.Parameter(torch.tensor(max(float(n_imag_std), 1e-8), dtype=torch.float), requires_grad=False)
 
-    def forward(self, x, t=None):
+    def forward(self, x, t=None, return_channel=False):
         # extract args
         bs, d = x.shape
         device = x.device
         # doppler
-        t = (np.arange(d) * self.dt)[None] # 1, d
+        t = (torch.arange(d) * self.dt)[None] # 1, d
         phi = (torch.rand(bs) * 2 * np.pi)[:, None]   # bs, 1
         h = self.a * np.exp(1j * (2 * np.pi * self.f_D * t + phi)) # bs, d
         # awgn
-        n = torch.randn(bs, d) * self.n_real_mean + self.n_real_std + \
-            1j * (torch.randn(bs, d) * self.n_imag_mean + self.n_imag_std) # bs, d
+        n = torch.randn(bs, d) * self.n_real_std + self.n_real_mean + \
+            1j * (torch.randn(bs, d) * self.n_imag_std + self.n_imag_mean) # bs, d
         # apply channel transformation
+        if return_channel:
+            return h, n
         x_hat = h * x + n
         return x_hat
+
+    def save(self):
+        args = self.args
+        path = os.path.join(args.model_dir, f'{args.model}.pt')
+        torch.save(self.state_dict(), path)
+        print(f'+ saved {args.model} at {path}')
+
+    def load(self):
+        args = self.args
+        path = os.path.join(args.model_dir, f'{args.model}.pt')
+        state_dict = torch.load(path)
+        self.load_state_dict(state_dict)
+        print(f'+ saved {args.model} at {path}')

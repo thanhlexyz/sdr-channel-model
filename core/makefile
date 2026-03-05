@@ -7,3 +7,6 @@ prep:
 
 fit:
 	python main.py --scenario=fit
+
+sample:
+	python main.py --scenario=sample

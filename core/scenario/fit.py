@@ -73,6 +73,4 @@ def fit(args):
                      n_real_std=n_real_std,
                      n_imag_mean=n_imag_mean,
                      n_imag_std=n_imag_std)
-    path = os.path.join(args.model_dir, f'{args.model}.pt')
-    torch.save(model, path)
-    print(f'+ saved {model} at {path}')
+    model.save()
