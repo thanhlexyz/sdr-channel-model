@@ -8,7 +8,6 @@ Then, it fit a deep learning layer to simulate the real channel.
 ```bash
 pip3 install -r requirements.txt
 ```
-
 # USAGE
 
 ### Step 1: Generate the channel dataset
@@ -62,4 +61,5 @@ python main.py --scenario check_fading
 ```
 
 ### TODO
-- [ ] check the implementation closely
+- [x] check the implementation closely
+- [ ] clean the code, write better readme for publication of this repo

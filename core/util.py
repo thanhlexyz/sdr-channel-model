@@ -32,10 +32,10 @@ def get_args():
                         choices=['basic'])
     # frame structure
     parser.add_argument('--n_preamble', type=int, default=11) # baker's preamble sequence
-    parser.add_argument('--n_symbol', type=int, default=256)
+    parser.add_argument('--n_symbol', type=int, default=2048)
     parser.add_argument('--n_sps', type=int, default=8)
     # channel dataset
-    parser.add_argument('--n_prep', type=int, default=1000)
+    parser.add_argument('--n_prep', type=int, default=1)
     # trainer (z -> z_hat)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--max_epoch', type=int, default=100)
