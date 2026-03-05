@@ -30,8 +30,10 @@ class Transmitter:
         # extract args
         args = self.args
         # sample random input
-        real = np.random.rand(args.n_symbol) * 2 - 1
-        imag = np.random.rand(args.n_symbol) * 2 - 1
+        real = np.ones(args.n_symbol)
+        imag = np.zeros(args.n_symbol)
+        # real = np.random.rand(args.n_symbol) * 2 - 1
+        # imag = np.random.rand(args.n_symbol) * 2 - 1
         x = real + 1j * imag
         x /= np.linalg.norm(x)
         return x, x
