@@ -1,9 +1,6 @@
-import os
+import matplotlib.pyplot as plt
 import numpy as np
-import torch
-from scipy import stats
-
-import simulator
+import os
 
 
 def fit(args):
@@ -11,43 +8,36 @@ def fit(args):
     path = os.path.join(args.dataset_dir, f'channel_io.npz')
     data = np.load(path)
     Z, Z_hat = data['Z'], data['Z_hat']
-    # extract h and n
-    H = []
-    N = []
-    for i in range(args.n_prep):
-        z = Z[i]
-        z_hat = Z_hat[i]
-        h = z.mean() / z_hat.mean()
-        H.append(h)
-        n = z_hat - h * z
-        N += list(n)
-    # fit h (Rayleigh): sample mean and std
-    H_real = np.array([h.real for h in H])
-    h_real_mean = H_real.mean()
-    h_real_std  = H_real.std()
-    H_imag = np.array([h.imag for h in H])
-    h_imag_mean = H_imag.mean()
-    h_imag_std  = H_imag.std()
-
-    # fit n_real, n_imag as Student's t (df, loc, scale); cap df for heavier tails
-    # lower df = heavier tails; cap max df so CDF matches better in the tails
-    MAX_DF = 4.0   # cap so distribution stays heavy-tailed (df->infty would be Gaussian)
-    N_real = np.array([n.real for n in N])
-    n_real_df, n_real_loc, n_real_scale = stats.t.fit(N_real)
-    n_real_df = np.clip(float(n_real_df), 1.0, MAX_DF)
-    N_imag = np.array([n.imag for n in N])
-    n_imag_df, n_imag_loc, n_imag_scale = stats.t.fit(N_imag)
-    n_imag_df = np.clip(float(n_imag_df), 1.0, MAX_DF)
-
-    # create channel model
-    model = simulator.model.channel.Model(args)
-    model.set_params(
-        h_real_mean=h_real_mean, h_real_std=h_real_std, h_imag_mean=h_imag_mean, h_imag_std=h_imag_std,
-        n_real_df=n_real_df, n_real_loc=n_real_loc, n_real_scale=n_real_scale,
-        n_imag_df=n_imag_df, n_imag_loc=n_imag_loc, n_imag_scale=n_imag_scale,
-    )
-    # save model
-    path = os.path.join(args.model_dir, 'channel.pt')
-    state_dict = model.state_dict()
-    torch.save(state_dict, path)
-    print(f'[+] saved channel model at: {path}')
+    n_prep = min(args.n_prep, len(Z))
+    # use last prep for plot: h per symbol in that block
+    z = Z[n_prep - 1]
+    z_hat = Z_hat[n_prep - 1]
+    h = z / z_hat
+    n_sym = len(h)
+    # timestamp of each symbol (seconds)
+    dt = args.n_sps / args.sample_rate
+    t = np.arange(n_sym) * dt
+    # fit Doppler so h_hat has same curvature as h: h(t) ≈ a*exp(j*(2*pi*f_D*t + phi))
+    # f_D in Hz (not carrier_freq!); get from FFT of h
+    f_axis = np.fft.fftfreq(n_sym, dt)
+    F = np.fft.fft(h)
+    k_max = np.argmax(np.abs(F))
+    f_D = float(f_axis[k_max])  # Hz
+    print(f_D)
+    # a and phi: a*exp(j*phi) = mean(h * exp(-j*2*pi*f_D*t))
+    z_n = h * np.exp(-1j * 2 * np.pi * f_D * t)
+    c = np.mean(z_n)
+    a = np.abs(c)
+    phi = np.angle(c)
+    if a < 1e-10:
+        a = np.mean(np.abs(h))
+    # estimated channel with same curvature (same f_D) as h
+    h_hat = a * np.exp(1j * (2 * np.pi * f_D * t + phi))
+    # plot
+    plt.plot(h.real, label='h.real')
+    plt.plot(h.imag, label='h.imag')
+    plt.plot(h_hat.real, label='h_hat.real')
+    plt.plot(h_hat.imag, label='h_hat.imag')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()

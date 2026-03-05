@@ -1,4 +1,4 @@
-from . import flat_fading, doppler
+from . import doppler
 
 def create(args):
     return eval(args.model).Model(args)
